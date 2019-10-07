@@ -57,6 +57,9 @@ elif [[ "${OPENVPN_PROVIDER^^}" = "FREEVPN" ]]
 then
     FREEVPN_DOMAIN=${OPENVPN_CONFIG%%-*}
     export OPENVPN_PASSWORD=$(curl -s https://freevpn.${FREEVPN_DOMAIN:-"be"}/accounts/ | grep Password |  sed s/"^.*Password\:.... "/""/g | sed s/"<.*"/""/g)
+elif [[ "${OPENVPN_PROVIDER^^}" = "VPNBOOK" ]]
+then
+    export OPENVPN_PASSWORD=$(get_vpnbook_pass)
 fi
 
 if [[ -n "${OPENVPN_CONFIG-}" ]]; then
@@ -134,6 +137,28 @@ function ufwAllowPortLong {
     echo "allowing ${sourceAddress} through the firewall to port ${portNum}"
     ufw allow from ${sourceAddress} to any port ${portNum}
   fi
+}
+
+## Get VpnBook password
+function get_vpnbook_pass {
+  pwd_url=$(curl -s "https://www.vpnbook.com/freevpn" | grep -m2 "Password:" | tail -n1 | cut -d \" -f2)
+  curl -s -X POST --header "apikey: 5a64d478-9c89-43d8-88e3-c65de9999580" \
+    -F "url=https://www.vpnbook.com/${pwd_url}" \
+    -F 'language=eng' \
+    -F 'isOverlayRequired=true' \
+    -F 'FileType=.Auto' \
+    -F 'IsCreateSearchablePDF=false' \
+    -F 'isSearchablePdfHideTextLayer=true' \
+    -F 'scale=true' \
+    -F 'detectOrientation=false' \
+    -F 'isTable=false' \
+    "https://api.ocr.space/parse/image" -o /tmp/vpnbook_pwd
+  echo $(cat /tmp/vpnbook_pwd \
+            | grep -Eo '"WordText":.*?[^\\]",' \
+            | awk -F':' '{print $2}' \
+            | awk -F',' '{print $1}' \
+            | awk '{ gsub(/^[ \t]+|[ \t]+$/, ""); print }' \
+            | tr -d \")
 }
 
 if [[ "${ENABLE_UFW,,}" == "true" ]]; then
